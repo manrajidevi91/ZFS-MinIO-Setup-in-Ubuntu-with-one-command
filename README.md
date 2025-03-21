@@ -32,7 +32,46 @@ It automates everything: pool creation, dataset mounting, MinIO installation, an
 curl -sSL https://raw.githubusercontent.com/manrajidevi91/ZFS-MinIO-Setup-in-Ubuntu-with-one-command/main/setup-zfs-minio.sh | sudo bash
 ```
 
-> Replace `your-username` and repo path with your GitHub account details.
+---
+
+## 📍 Where Can You Install This?
+
+This script is designed to work in the following environments:
+
+### 1. **Local Ubuntu Machine**
+```bash
+# Recommended for personal use, testing, or small deployments
+curl -sSL https://raw.githubusercontent.com/manrajidevi91/ZFS-MinIO-Setup-in-Ubuntu-with-one-command/main/setup-zfs-minio.sh | sudo bash
+```
+
+### 2. **Cloud VM (AWS EC2, DigitalOcean, Linode, etc.)**
+```bash
+# Make sure the VM has a secondary attached disk (e.g., /dev/sdb)
+# SSH into your cloud VM and run:
+curl -sSL https://raw.githubusercontent.com/manrajidevi91/ZFS-MinIO-Setup-in-Ubuntu-with-one-command/main/setup-zfs-minio.sh | sudo bash
+```
+
+### 3. **Bare Metal Server**
+```bash
+# Ideal for production setups with physical disks
+curl -sSL https://raw.githubusercontent.com/manrajidevi91/ZFS-MinIO-Setup-in-Ubuntu-with-one-command/main/setup-zfs-minio.sh | sudo bash
+```
+
+### 4. **Ubuntu Server in Proxmox or VirtualBox**
+```bash
+# If using a virtual disk as /dev/sdb
+curl -sSL https://raw.githubusercontent.com/manrajidevi91/ZFS-MinIO-Setup-in-Ubuntu-with-one-command/main/setup-zfs-minio.sh | sudo bash
+```
+
+### 5. **Docker Container with Privileged Access**
+```bash
+# If you're running Ubuntu inside a Docker container with access to /dev/sdb and ZFS modules,
+# you can still run this script. Make sure your container has privileged access and the necessary mounts.
+
+docker run --rm -it --privileged   -v /dev:/dev   -v /lib/modules:/lib/modules   ubuntu bash -c "apt update && apt install -y curl &&   curl -sSL https://raw.githubusercontent.com/manrajidevi91/ZFS-MinIO-Setup-in-Ubuntu-with-one-command/main/setup-zfs-minio.sh | bash"
+```
+
+> ⚠️ ZFS inside Docker requires kernel module access and privileged mode.
 
 ---
 
