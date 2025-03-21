@@ -7,7 +7,7 @@ apt update
 apt install -y zfsutils-linux
 
 echo "🔍 Searching for an available unused disk..."
-AVAILABLE_DISK=$(lsblk -dpno NAME,TYPE | grep "disk" | grep -vE "boot|zfs|loop|nvme0n1" | awk '{print $1}' | head -n 1)
+AVAILABLE_DISK=$(lsblk -dpno NAME,TYPE,MOUNTPOINT | grep "disk" | grep -v "/boot" | awk '$3 == "" {print $1}' | grep -vE "/dev/sda" | head -n 1)
 
 if [ -z "$AVAILABLE_DISK" ]; then
   echo "❌ No available disk found to create a ZFS pool."
