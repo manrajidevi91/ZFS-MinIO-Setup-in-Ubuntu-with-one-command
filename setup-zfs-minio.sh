@@ -7,7 +7,7 @@ apt update
 apt install -y zfsutils-linux
 
 echo "🔍 Searching for a truly unused and safe disk (excluding system disks and optical drives)..."
-AVAILABLE_DISK=$(lsblk -dpno NAME,TYPE,MOUNTPOINT | awk '$2=="disk" && $3=="" && $1!="/dev/sda" && $1!="/dev/sr0" {print $1; exit}')
+AVAILABLE_DISK=$(lsblk -dpno NAME,TYPE,MOUNTPOINT | awk '$2=="disk" && $3=="" {print $1}' | grep -Ev '^/dev/sda$|^/dev/sr0$' | head -n 1)
 
 if [ -z "$AVAILABLE_DISK" ]; then
   echo "❌ No safe available disk found to create a ZFS pool."
