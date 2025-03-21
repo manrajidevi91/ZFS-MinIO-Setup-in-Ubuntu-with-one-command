@@ -29,7 +29,7 @@ It automates everything: pool creation, dataset mounting, MinIO installation, an
 ### 📥 Run in One Command
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/your-username/server-setup-scripts/main/setup-zfs-minio.sh | sudo bash
+curl -sSL https://raw.githubusercontent.com/manrajidevi91/ZFS-MinIO-Setup-in-Ubuntu-with-one-command/main/setup-zfs-minio.sh | sudo bash
 ```
 
 > Replace `your-username` and repo path with your GitHub account details.
