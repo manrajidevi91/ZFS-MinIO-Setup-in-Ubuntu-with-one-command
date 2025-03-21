@@ -6,8 +6,18 @@ echo "🚀 Installing ZFS..."
 apt update
 apt install -y zfsutils-linux
 
-echo "📦 Creating ZFS Pool (zpool1) on /dev/sdb..."
-zpool create zpool1 /dev/sdb || true
+echo "🔍 Searching for an available unused disk..."
+AVAILABLE_DISK=$(lsblk -dpno NAME,TYPE | grep "disk" | grep -vE "boot|zfs|loop|nvme0n1" | awk '{print $1}' | head -n 1)
+
+if [ -z "$AVAILABLE_DISK" ]; then
+  echo "❌ No available disk found to create a ZFS pool."
+  exit 1
+else
+  echo "✅ Using available disk: $AVAILABLE_DISK"
+fi
+
+echo "📦 Creating ZFS Pool (zpool1) on $AVAILABLE_DISK..."
+zpool create -f zpool1 "$AVAILABLE_DISK"
 
 echo "📁 Creating ZFS Dataset for MinIO..."
 zfs create zpool1/minio
