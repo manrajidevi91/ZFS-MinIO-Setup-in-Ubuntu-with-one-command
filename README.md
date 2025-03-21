@@ -1,32 +1,30 @@
-# 🚀 ZFS + MinIO Setup Script for Ubuntu
+# 🚀 ZFS + MinIO Setup Scripts (Ubuntu, Windows, Docker)
 
-This repository contains a one-click setup script to install and configure **ZFS** with **MinIO** on **Ubuntu**.  
-It automates everything: pool creation, dataset mounting, MinIO installation, and systemd setup.
+This repository provides all-in-one setup scripts to install and configure **MinIO** for content delivery across platforms.
 
 ---
 
 ## 📦 Features
 
-- Installs `zfsutils-linux` (ZFS)
-- Creates ZFS pool (`zpool1`) on `/dev/sdb`
-- Creates and mounts dataset at `/mnt/minio`
-- Installs and configures MinIO server
-- Automatically starts MinIO as a service on boot
-- Sets up MinIO Console on port `9001`, API on port `9000`
+- ✅ Ubuntu Linux: ZFS + MinIO fully automated setup
+- ✅ Windows: Portable MinIO server setup via `.bat` file
+- ✅ Docker: Privileged container setup with MinIO support
+- 📁 Automatic storage mounting and bucket creation
+- 🔐 MinIO console and S3 API access
 
 ---
 
 ## 🖥️ Requirements
 
-- Ubuntu 20.04 or later
-- Root or sudo privileges
-- One unused disk (e.g., `/dev/sdb`) for ZFS
+| Platform | Requirements |
+|----------|--------------|
+| **Ubuntu** | Ubuntu 20.04+ and one unused disk (e.g., `/dev/sdb`) |
+| **Windows** | Windows 10/11 with PowerShell and admin access |
+| **Docker** | Host system with Docker and privileged mode access |
 
 ---
 
-## ⚙️ Usage
-
-### 📥 Run in One Command
+## ⚙️ One-Liner Setup (Ubuntu)
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/manrajidevi91/ZFS-MinIO-Setup-in-Ubuntu-with-one-command/main/setup-zfs-minio.sh | sudo bash
@@ -36,50 +34,61 @@ curl -sSL https://raw.githubusercontent.com/manrajidevi91/ZFS-MinIO-Setup-in-Ubu
 
 ## 📍 Where Can You Install This?
 
-This script is designed to work in the following environments:
-
-### 1. **Local Ubuntu Machine**
+### ✅ 1. Local Ubuntu Machine
 ```bash
-# Recommended for personal use, testing, or small deployments
 curl -sSL https://raw.githubusercontent.com/manrajidevi91/ZFS-MinIO-Setup-in-Ubuntu-with-one-command/main/setup-zfs-minio.sh | sudo bash
 ```
 
-### 2. **Cloud VM (AWS EC2, DigitalOcean, Linode, etc.)**
+### ✅ 2. Cloud VM (AWS, DigitalOcean, etc.)
+Ensure a secondary disk is available as `/dev/sdb`, then run:
 ```bash
-# Make sure the VM has a secondary attached disk (e.g., /dev/sdb)
-# SSH into your cloud VM and run:
 curl -sSL https://raw.githubusercontent.com/manrajidevi91/ZFS-MinIO-Setup-in-Ubuntu-with-one-command/main/setup-zfs-minio.sh | sudo bash
 ```
 
-### 3. **Bare Metal Server**
+### ✅ 3. Bare Metal Server
+Same command as above.
+
+### ✅ 4. Ubuntu VM (Proxmox, VirtualBox)
+Attach a virtual disk and run:
 ```bash
-# Ideal for production setups with physical disks
 curl -sSL https://raw.githubusercontent.com/manrajidevi91/ZFS-MinIO-Setup-in-Ubuntu-with-one-command/main/setup-zfs-minio.sh | sudo bash
 ```
 
-### 4. **Ubuntu Server in Proxmox or VirtualBox**
+### ✅ 5. Docker Container
 ```bash
-# If using a virtual disk as /dev/sdb
-curl -sSL https://raw.githubusercontent.com/manrajidevi91/ZFS-MinIO-Setup-in-Ubuntu-with-one-command/main/setup-zfs-minio.sh | sudo bash
-```
-
-### 5. **Docker Container with Privileged Access**
-```bash
-# If you're running Ubuntu inside a Docker container with access to /dev/sdb and ZFS modules,
-# you can still run this script. Make sure your container has privileged access and the necessary mounts.
-
 docker run --rm -it --privileged   -v /dev:/dev   -v /lib/modules:/lib/modules   ubuntu bash -c "apt update && apt install -y curl &&   curl -sSL https://raw.githubusercontent.com/manrajidevi91/ZFS-MinIO-Setup-in-Ubuntu-with-one-command/main/setup-zfs-minio.sh | bash"
 ```
 
-> ⚠️ ZFS inside Docker requires kernel module access and privileged mode.
+> ⚠️ Requires privileged access and `/dev/sdb` passthrough.
 
 ---
 
-## 🗂️ File Structure
+## 🪟 Windows Setup (MinIO Only)
 
-| File                | Description                      |
-|---------------------|----------------------------------|
-| `setup-zfs-minio.sh` | Main installer and configurator |
+Use the included `setup_minio.bat` for standalone MinIO setup on Windows.
+
+### ▶️ How to Use
+
+1. Clone the Repo:
+```powershell
+git clone https://github.com/manrajidevi91/ZFS-MinIO-Setup-in-Ubuntu-with-one-command.git
+cd ZFS-MinIO-Setup-in-Ubuntu-with-one-command
+```
+
+2. Run the Script:
+```powershell
+cd E:\Work\Server\MinIO
+.\setup_minio.bat
+```
+> Or right-click and run as Administrator
+
+### 🧰 What it Does
+
+- Creates MinIO storage directory
+- Sets environment variables
+- Downloads and runs MinIO server on port 9000
+- Starts MinIO Console on port 9001
+- Creates `video-bucket` and makes it public
 
 ---
 
@@ -92,16 +101,27 @@ docker run --rm -it --privileged   -v /dev:/dev   -v /lib/modules:/lib/modules  
 
 ## 📡 Access
 
-- MinIO Console: `http://<your-ip>:9001`
-- MinIO API: `http://<your-ip>:9000`
-- Data Path: `/mnt/minio/data`
+| Component | URL |
+|----------|-----|
+| MinIO Console | http://127.0.0.1:9001 or http://<your-ip>:9001 |
+| MinIO API     | http://127.0.0.1:9000 or http://<your-ip>:9000 |
+
+---
+
+## 🗂️ File Structure
+
+| File                | Description                      |
+|---------------------|----------------------------------|
+| `setup-zfs-minio.sh` | Ubuntu (ZFS + MinIO) setup script |
+| `setup_minio.bat`    | Windows MinIO setup script       |
 
 ---
 
 ## 🛡️ Notes
 
-- You can modify the ZFS pool name or device by editing the script.
-- To support custom environments or mounts, adapt the script accordingly.
+- You can modify disk path `/dev/sdb` or bucket name `video-bucket` in the scripts.
+- ZFS requires root privileges and available disk for pool creation.
+- Docker setup must be privileged to use ZFS (or use MinIO alone without ZFS).
 
 ---
 
