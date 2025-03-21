@@ -6,8 +6,13 @@ echo "🚀 Installing ZFS..."
 apt update
 apt install -y zfsutils-linux
 
-echo "🔍 Searching for a safe, available unused disk (excluding /dev/sda)..."
-AVAILABLE_DISK=$(lsblk -dpno NAME,TYPE,MOUNTPOINT | grep "disk" | awk '$3 == "" {print $1}' | grep -vE "/dev/sda" | head -n 1)
+echo "🔍 Searching for a truly unused and safe disk (excluding system disks)..."
+AVAILABLE_DISK=$(lsblk -dpno NAME | grep -v "/dev/sda" | while read disk; do
+  if [ -z "$(lsblk -no MOUNTPOINT "$disk" | grep -v '^$')" ]; then
+    echo "$disk"
+    break
+  fi
+done)
 
 if [ -z "$AVAILABLE_DISK" ]; then
   echo "❌ No safe available disk found to create a ZFS pool."
