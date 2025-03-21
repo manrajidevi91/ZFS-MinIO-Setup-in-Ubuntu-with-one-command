@@ -1,23 +1,39 @@
 #!/bin/bash
-
 set -e
 
 echo "🚀 Installing ZFS..."
 apt update
 apt install -y zfsutils-linux
 
-echo "🔍 Searching for a truly unused and safe disk (excluding system disks and optical drives)..."
-AVAILABLE_DISK=$(lsblk -dpno NAME,TYPE,MOUNTPOINT | awk '$2=="disk" && $3=="" {print $1}' | grep -Ev '^/dev/sda$|^/dev/sr0$' | head -n 1)
+echo "🔍 Calculating free space on root filesystem..."
+# Get available space (in KB) on /
+free_kb=$(df --output=avail / | tail -1 | tr -d ' ')
+free_bytes=$((free_kb * 1024))
 
-if [ -z "$AVAILABLE_DISK" ]; then
-  echo "❌ No safe available disk found to create a ZFS pool."
+# Define a safety margin of 1GB (in bytes)
+margin=1073741824
+
+if [ $free_bytes -le $margin ]; then
+  echo "❌ Not enough free space available on / to create the loop file."
   exit 1
-else
-  echo "✅ Using available disk: $AVAILABLE_DISK"
 fi
 
-echo "📦 Creating ZFS Pool (zpool1) on $AVAILABLE_DISK..."
-zpool create -f zpool1 "$AVAILABLE_DISK"
+# Calculate the size for the loop file (all free space minus margin)
+loop_size=$((free_bytes - margin))
+echo "✅ Free space: $free_bytes bytes. Creating loop file of size $loop_size bytes (leaving a 1GB margin)."
+
+# Define the loop file location
+LOOP_FILE="/var/zfs_pool.img"
+
+# Create the loop file (sparse file)
+fallocate -l $loop_size $LOOP_FILE
+
+# Attach the loop file to a loop device
+LOOP_DEV=$(losetup --find --show $LOOP_FILE)
+echo "✅ Using loop device: $LOOP_DEV"
+
+echo "📦 Creating ZFS Pool (zpool1) on $LOOP_DEV..."
+zpool create -f zpool1 "$LOOP_DEV"
 
 echo "📁 Creating ZFS Dataset for MinIO..."
 zfs create zpool1/minio
@@ -27,6 +43,7 @@ mkdir -p /mnt/minio
 zfs set mountpoint=/mnt/minio zpool1/minio
 
 echo "🚀 Installing MinIO Server..."
+# Create a dedicated user for MinIO if it doesn't exist
 useradd -r minio-user || true
 mkdir -p /mnt/minio/{data,config}
 chown -R minio-user:minio-user /mnt/minio
@@ -62,3 +79,4 @@ echo "✅ MinIO setup complete!"
 echo "➡️  Access Console: http://<your-server-ip>:9001"
 echo "➡️  Access API: http://<your-server-ip>:9000"
 echo "🗂️  ZFS Storage: Mounted at /mnt/minio"
+echo "🔎 To see the loop file details, run: losetup -a"
