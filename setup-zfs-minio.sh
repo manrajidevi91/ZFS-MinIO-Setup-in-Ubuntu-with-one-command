@@ -1,6 +1,10 @@
 #!/bin/bash
 set -e
 
+#############################
+# ZFS + MinIO Setup Section #
+#############################
+
 echo "🚀 Installing ZFS..."
 apt update
 apt install -y zfsutils-linux
@@ -76,7 +80,57 @@ systemctl daemon-reload
 systemctl enable --now minio
 
 echo "✅ MinIO setup complete!"
-echo "➡️  Access Console: http://<your-server-ip>:9001"
-echo "➡️  Access API: http://<your-server-ip>:9000"
-echo "🗂️  ZFS Storage: Mounted at /mnt/minio"
-echo "🔎 To see the loop file details, run: losetup -a"
+echo "➡️  MinIO Console is running on port 9001 (locally: http://127.0.0.1:9001)"
+echo "➡️  MinIO API is running on port 9000 (locally: http://127.0.0.1:9000)"
+
+
+#########################################
+# Exposing MinIO with Nginx and SSL    #
+#########################################
+
+echo ""
+echo "🚀 Installing Nginx and Certbot for SSL..."
+apt install -y nginx certbot python3-certbot-nginx
+
+echo "🚀 Configuring Nginx reverse proxy for MinIO Console..."
+read -p "Enter your domain name for MinIO (e.g. minio.example.com): " DOMAIN
+read -p "Enter your email for SSL certificate registration: " EMAIL
+
+NGINX_CONF="/etc/nginx/sites-available/minio.conf"
+
+cat <<EOF > $NGINX_CONF
+server {
+    listen 80;
+    server_name $DOMAIN;
+    location / {
+        return 301 https://\$host\$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    server_name $DOMAIN;
+
+    ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers on;
+
+    location / {
+        proxy_pass http://127.0.0.1:9001;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+    }
+}
+EOF
+
+ln -sf $NGINX_CONF /etc/nginx/sites-enabled/minio.conf
+nginx -t && systemctl reload nginx
+
+echo "🚀 Obtaining SSL certificate with Certbot..."
+certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m $EMAIL
+
+echo "✅ SSL setup complete."
+echo "➡️  Access your MinIO Console at: https://$DOMAIN"
+echo ""
+echo "🔎 To check the loop file details, run: losetup -a"
