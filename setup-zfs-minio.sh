@@ -90,10 +90,10 @@ echo ""
 echo "🔧 Configuring DuckDNS with: $DOMAIN"
 mkdir -p /opt/duckdns
 DUCKDNS_SCRIPT="/opt/duckdns/duck.sh"
-cat <<EOF > "$DUCKDNS_SCRIPT"
-#!/bin/bash
-echo url="https://www.duckdns.org/update?domains=$DUCKDNS_SUBDOMAIN&token=$DUCKDNS_TOKEN&ip=" | curl -k -o /opt/duckdns/duck.log -K -
-EOF
+mkdir -p ~/duckdns
+DUCKDNS_SCRIPT="~/duckdns/duck.sh"
+echo '#!/bin/bash' > "$DUCKDNS_SCRIPT"
+echo 'echo url="https://www.duckdns.org/update?domains=$DUCKDNS_SUBDOMAIN&token=$DUCKDNS_TOKEN&ip=" | curl -k -o ~/duckdns/duck.log -K -' >> "$DUCKDNS_SCRIPT"
 chmod 700 "$DUCKDNS_SCRIPT"
 
 # Test DuckDNS script once manually
