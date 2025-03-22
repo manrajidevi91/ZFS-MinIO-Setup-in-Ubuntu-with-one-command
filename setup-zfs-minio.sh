@@ -31,12 +31,16 @@ zfs set mountpoint=/mnt/minio zpool1/minio
 #############################
 
 echo "🚀 Installing MinIO Server..."
-useradd -r minio-user || true
+useradd -r minio-user 2>/dev/null || true
 mkdir -p /mnt/minio/{data,config}
 chown -R minio-user:minio-user /mnt/minio
 
-wget https://dl.min.io/server/minio/release/linux-amd64/minio -O /usr/local/bin/minio
-chmod +x /usr/local/bin/minio
+if [ ! -f /usr/local/bin/minio ]; then
+  wget https://dl.min.io/server/minio/release/linux-amd64/minio -O /usr/local/bin/minio
+  chmod +x /usr/local/bin/minio
+else
+  echo "✅ MinIO binary already exists, skipping download."
+fi
 
 echo "🔧 Creating MinIO systemd service..."
 cat <<EOF >/etc/systemd/system/minio.service
@@ -99,6 +103,7 @@ certbot --nginx --redirect --agree-tos --non-interactive -d $DOMAIN -m $EMAIL
 
 echo "✅ SSL setup complete."
 echo "➡️  Access MinIO at: https://$DOMAIN"
+
 
 #########################################
 # DuckDNS (Dynamic DNS) Configuration  #
