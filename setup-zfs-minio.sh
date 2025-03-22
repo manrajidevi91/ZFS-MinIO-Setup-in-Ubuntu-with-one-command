@@ -77,14 +77,17 @@ echo "➡️  MinIO API: http://127.0.0.1:9000"
 echo ""
 echo "🔧 DuckDNS Configuration..."
 read -p "Do you want to use DuckDNS for dynamic DNS? (y/n): " USE_DUCKDNS
-if [[ "$USE_DUCKDNS" == "y" || "$USE_DUCKDNS" == "Y" ]]; then
+
+if [[ "$USE_DUCKDNS" =~ ^[Yy]$ ]]; then
   read -p "Enter your DuckDNS API token: " DUCKDNS_TOKEN
   read -p "Enter your DuckDNS subdomain (without .duckdns.org): " DUCKDNS_SUBDOMAIN
-  DOMAIN="$DUCKDNS_SUBDOMAIN.duckdns.org"
+  DOMAIN="${DUCKDNS_SUBDOMAIN}.duckdns.org"
 
   DUCKDNS_SCRIPT="/usr/local/bin/update-duckdns.sh"
-  echo "#!/bin/bash" > "$DUCKDNS_SCRIPT"
-  echo "curl -k \"https://www.duckdns.org/update?domains=${DUCKDNS_SUBDOMAIN}&token=${DUCKDNS_TOKEN}&ip=\"" >> "$DUCKDNS_SCRIPT"
+  cat <<EOF > "$DUCKDNS_SCRIPT"
+#!/bin/bash
+curl -k "https://www.duckdns.org/update?domains=${DUCKDNS_SUBDOMAIN}&token=${DUCKDNS_TOKEN}&ip="
+EOF
   chmod +x "$DUCKDNS_SCRIPT"
 
   echo "✅ DuckDNS update script created at $DUCKDNS_SCRIPT."
