@@ -9,22 +9,28 @@ echo "🚀 Installing ZFS..."
 apt update
 apt install -y zfsutils-linux
 
-# List available partitions
 echo "🔍 Available disk partitions:"
-mapfile -t PARTS < <(lsblk -dpno NAME,SIZE | grep -v "loop")
+mapfile -t PARTS < <(lsblk -dpno NAME,SIZE,TYPE | grep "part")
+
+if [ ${#PARTS[@]} -eq 0 ]; then
+  echo "❌ No usable partitions found. Exiting."
+  exit 1
+fi
+
 for i in "${!PARTS[@]}"; do
     echo "$((i+1)). ${PARTS[$i]}"
 done
 
-# Ask user to select a partition
 read -p "📦 Enter the number of the partition to use for ZFS pool (careful: data will be erased): " PART_INDEX
-PART_INDEX=$((PART_INDEX-1))
-ZFS_DEVICE=$(echo "${PARTS[$PART_INDEX]}" | awk '{print $1}')
 
-if [ -z "$ZFS_DEVICE" ]; then
+# Validate input
+if ! [[ "$PART_INDEX" =~ ^[0-9]+$ ]] || [ "$PART_INDEX" -lt 1 ] || [ "$PART_INDEX" -gt "${#PARTS[@]}" ]; then
     echo "❌ Invalid selection. Exiting."
     exit 1
 fi
+
+PART_INDEX=$((PART_INDEX-1))
+ZFS_DEVICE=$(echo "${PARTS[$PART_INDEX]}" | awk '{print $1}')
 
 # Check if the pool already exists
 if zpool list | grep -q '^zpool1'; then
