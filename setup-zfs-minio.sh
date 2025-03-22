@@ -125,23 +125,71 @@ systemctl start nginx
 
 echo "🚀 Configuring Nginx reverse proxy for MinIO Console..."
 NGINX_CONF="/etc/nginx/sites-available/minio.conf"
+
+# Create Nginx configuration
 cat <<EOF > $NGINX_CONF
 server {
     listen 80;
     server_name $DOMAIN;
+
+    # Allow ACME challenge for Let's Encrypt
+    location /.well-known/acme-challenge/ {
+        allow all;
+        root /var/www/html;
+    }
+
     location / {
         proxy_pass http://127.0.0.1:9001;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        
+        # WebSocket support
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
     }
 }
 EOF
 
+# Enable the site and test configuration
 ln -sf $NGINX_CONF /etc/nginx/sites-enabled/minio.conf
+rm -f /etc/nginx/sites-enabled/default  # Remove default site
 nginx -t && systemctl reload nginx
 
-echo "🚀 Obtaining SSL certificate with Certbot..."
-certbot --nginx --redirect --agree-tos --non-interactive -d $DOMAIN -m $EMAIL
+echo "⏳ Waiting for DNS propagation (60 seconds)..."
+sleep 60  # Wait for DNS to propagate
 
-echo "✅ SSL setup complete."
-echo "➡️  Access MinIO at: https://$DOMAIN"
+# Check if ports 80 and 443 are accessible
+echo "🔍 Checking if ports are accessible..."
+nc -zv localhost 80 || echo "Warning: Port 80 might not be accessible"
+nc -zv localhost 443 || echo "Warning: Port 443 might not be accessible"
+
+echo "🚀 Obtaining SSL certificate with Certbot..."
+# Try obtaining the certificate with DNS challenge if HTTP challenge fails
+if ! certbot --nginx --redirect --agree-tos --non-interactive -d $DOMAIN -m $EMAIL; then
+    echo "⚠️ HTTP challenge failed, trying DNS challenge..."
+    certbot certonly --manual --preferred-challenges=dns \
+        --agree-tos --non-interactive -d $DOMAIN -m $EMAIL \
+        --manual-auth-hook "/bin/true" \
+        --manual-cleanup-hook "/bin/true"
+fi
+
+# Verify SSL certificate was obtained
+if [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
+    echo "✅ SSL setup complete."
+    echo "➡️  Access MinIO at: https://$DOMAIN"
+else
+    echo "⚠️ SSL setup incomplete. You can still access MinIO at: http://$DOMAIN"
+    echo "To manually obtain SSL certificate later, run:"
+    echo "certbot --nginx -d $DOMAIN"
+fi
+
+# Add note about firewall
+echo ""
+echo "📝 Important Notes:"
+echo "1. Ensure ports 80 and 443 are open in your firewall"
+echo "2. Run these commands if needed:"
+echo "   sudo ufw allow 80/tcp"
+echo "   sudo ufw allow 443/tcp"
