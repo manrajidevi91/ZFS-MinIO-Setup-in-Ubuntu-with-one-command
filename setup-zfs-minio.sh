@@ -9,30 +9,8 @@ echo "🚀 Installing ZFS..."
 apt update
 apt install -y zfsutils-linux
 
-echo "🔍 Detecting usable (non-system) disks for ZFS pool..."
-mapfile -t PARTS < <(lsblk -dpno NAME,SIZE,TYPE | grep "disk" | grep -vE "sr|rom")
-
-if [ ${#PARTS[@]} -eq 0 ]; then
-  echo "❌ No suitable disks found for ZFS. Exiting."
-  exit 1
-fi
-
-echo "Available disks for ZFS pool creation:"
-for i in "${!PARTS[@]}"; do
-    echo "$((i+1)). ${PARTS[$i]}"
-done
-
-read -p "📦 Enter the number of the disk to use for ZFS pool (⚠️ will ERASE data): " PART_INDEX
-
-# Validate input
-if ! [[ "$PART_INDEX" =~ ^[0-9]+$ ]] || [ "$PART_INDEX" -lt 1 ] || [ "$PART_INDEX" -gt "${#PARTS[@]}" ]; then
-    echo "❌ Invalid selection. Exiting."
-    exit 1
-fi
-
-PART_INDEX=$((PART_INDEX - 1))
-SELECTED_LINE="${PARTS[$PART_INDEX]}"
-ZFS_DEVICE=$(echo "$SELECTED_LINE" | awk '{print $1}')
+ZFS_DEVICE="/dev/vda"
+echo "📦 Selected disk for ZFS pool: $ZFS_DEVICE"
 
 # Create ZFS pool
 if zpool list | grep -q '^zpool1'; then
