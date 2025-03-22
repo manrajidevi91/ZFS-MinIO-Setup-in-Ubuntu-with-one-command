@@ -95,6 +95,7 @@ else
   echo "✅ DuckDNS configuration skipped."
   read -p "Enter your domain name for MinIO (e.g. minio.example.com): " DOMAIN
 fi
+fi
 
 read -p "Enter your email for SSL certificate registration: " EMAIL
 
