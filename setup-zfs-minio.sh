@@ -77,35 +77,34 @@ echo "➡️  MinIO API: http://127.0.0.1:9000"
 echo ""
 echo "🔧 DuckDNS Configuration..."
 
-# Save command-line arguments (if provided)
-ARG_DUCKDNS_TOKEN="$1"
-ARG_DUCKDNS_SUBDOMAIN="$2"
-ARG_EMAIL="$3"
-
-read -p "Do you want to use DuckDNS for dynamic DNS? (y/n): " USE_DUCKDNS
+# If command-line arguments for DuckDNS token and subdomain are provided, use them.
+if [[ -n "$1" && -n "$2" ]]; then
+  DUCKDNS_TOKEN="$1"
+  DUCKDNS_SUBDOMAIN="$2"
+  USE_DUCKDNS="y"
+  EMAIL_ARG="$3"  # optional email argument
+else
+  read -p "Do you want to use DuckDNS for dynamic DNS? (y/n): " USE_DUCKDNS
+fi
 
 if [[ "$USE_DUCKDNS" =~ ^[Yy]$ ]]; then
-  # Use command-line argument if provided, otherwise prompt for the token.
-  if [[ -z "$ARG_DUCKDNS_TOKEN" ]]; then
+  # If not provided via arguments, prompt for the token.
+  if [[ -z "$DUCKDNS_TOKEN" ]]; then
     read -p "Enter your DuckDNS API token: " DUCKDNS_TOKEN
-  else
-    DUCKDNS_TOKEN="$ARG_DUCKDNS_TOKEN"
   fi
 
-  # Use command-line argument if provided, otherwise prompt for the subdomain.
-  if [[ -z "$ARG_DUCKDNS_SUBDOMAIN" ]]; then
+  # If not provided via arguments, prompt for the subdomain.
+  if [[ -z "$DUCKDNS_SUBDOMAIN" ]]; then
     read -p "Enter your DuckDNS subdomain (without .duckdns.org): " DUCKDNS_SUBDOMAIN
-  else
-    DUCKDNS_SUBDOMAIN="$ARG_DUCKDNS_SUBDOMAIN"
   fi
 
   DOMAIN="${DUCKDNS_SUBDOMAIN}.duckdns.org"
 
-  # For email, if not provided, prompt for it.
-  if [[ -z "$ARG_EMAIL" ]]; then
+  # For email, use the provided argument if available; otherwise prompt.
+  if [[ -z "$EMAIL_ARG" ]]; then
     read -p "Enter your email for SSL certificate registration: " EMAIL
   else
-    EMAIL="$ARG_EMAIL"
+    EMAIL="$EMAIL_ARG"
   fi
 
   DUCKDNS_SCRIPT="/usr/local/bin/update-duckdns.sh"
@@ -124,7 +123,7 @@ EOF
   echo "  Email: $EMAIL"
 else
   echo "✅ DuckDNS configuration skipped."
-  # If DuckDNS is not used, prompt for a valid domain manually.
+  # Prompt for domain manually if DuckDNS is not used.
   while true; do
     read -p "Enter your domain name for MinIO (e.g. minio.example.com): " DOMAIN
     if [[ -n "$DOMAIN" ]]; then
@@ -132,11 +131,7 @@ else
     fi
     echo "Error: Domain cannot be empty. Please provide a valid domain."
   done
-  if [[ -z "$ARG_EMAIL" ]]; then
-    read -p "Enter your email for SSL certificate registration: " EMAIL
-  else
-    EMAIL="$ARG_EMAIL"
-  fi
+  read -p "Enter your email for SSL certificate registration: " EMAIL
 fi
 
 #############################
