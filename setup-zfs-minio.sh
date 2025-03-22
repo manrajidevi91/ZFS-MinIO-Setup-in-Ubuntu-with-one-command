@@ -77,7 +77,7 @@ echo "➡️  MinIO API: http://127.0.0.1:9000"
 echo ""
 echo "🔧 DuckDNS Configuration..."
 read -p "Do you want to use DuckDNS for dynamic DNS? (y/n): " USE_DUCKDNS
-if [[ "$USE_DUCKDNS" == "y" || "$USE_DUCKDNS" == "Y" ]]; then
+if [[ "$USE_DUCKDNS" =~ ^[yY]$ ]]; then
   read -p "Enter your DuckDNS API token: " DUCKDNS_TOKEN
   read -p "Enter your DuckDNS subdomain (without .duckdns.org): " DUCKDNS_SUBDOMAIN
   DOMAIN="$DUCKDNS_SUBDOMAIN.duckdns.org"
