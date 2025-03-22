@@ -93,12 +93,31 @@ echo "🔧 Configuring DuckDNS with: $DOMAIN"
 mkdir -p ~/duckdns
 DUCKDNS_SCRIPT=~/duckdns/duck.sh
 
-# Create the update script with proper variable interpolation
+# Create the update script with IPv6 support
 cat << 'EOF' > "$DUCKDNS_SCRIPT"
 #!/bin/bash
 DUCKDNS_TOKEN="$1"
 DUCKDNS_SUBDOMAIN="$2"
-echo url="https://www.duckdns.org/update?domains=${DUCKDNS_SUBDOMAIN}&token=${DUCKDNS_TOKEN}&ip=" | curl -k -o ~/duckdns/duck.log -K -
+
+# Get IPv6 address
+IPV6=$(ip -6 addr show scope global | grep -v deprecated | grep -oP '(?<=inet6 )[0-9a-f:]+' | head -n 1)
+
+if [ -z "$IPV6" ]; then
+    echo "❌ No IPv6 address found"
+    exit 1
+fi
+
+# Update DuckDNS with IPv6
+echo "Updating DuckDNS with IPv6: $IPV6"
+curl -k -s "https://www.duckdns.org/update?domains=${DUCKDNS_SUBDOMAIN}&token=${DUCKDNS_TOKEN}&ipv6=${IPV6}" -o ~/duckdns/duck.log
+
+# Check update status
+if grep -q "OK" ~/duckdns/duck.log; then
+    echo "✅ DuckDNS IPv6 update successful"
+else
+    echo "❌ DuckDNS update failed"
+    cat ~/duckdns/duck.log
+fi
 EOF
 
 # Make the script executable
@@ -113,39 +132,40 @@ bash "$DUCKDNS_SCRIPT" "$DUCKDNS_TOKEN" "$DUCKDNS_SUBDOMAIN"
 echo "✅ DuckDNS update script created at $DUCKDNS_SCRIPT"
 echo "✅ Cron job set to run every 5 minutes"
 
-#########################################
-# Exposing MinIO with Nginx and SSL    #
-#########################################
+# Configure firewall to allow ports 80, 443, and 9001
+echo "🔧 Configuring firewall rules..."
+if command -v ufw >/dev/null; then
+    ufw allow 80/tcp
+    ufw allow 443/tcp
+    ufw allow 9001/tcp
+    echo "✅ UFW rules added for ports 80, 443, and 9001"
+else
+    # If UFW is not installed, try using iptables directly
+    iptables -A INPUT -p tcp --dport 80 -j ACCEPT
+    iptables -A INPUT -p tcp --dport 443 -j ACCEPT
+    iptables -A INPUT -p tcp --dport 9001 -j ACCEPT
+    ip6tables -A INPUT -p tcp --dport 80 -j ACCEPT
+    ip6tables -A INPUT -p tcp --dport 443 -j ACCEPT
+    ip6tables -A INPUT -p tcp --dport 9001 -j ACCEPT
+    echo "✅ iptables rules added for ports 80, 443, and 9001"
+fi
 
-echo ""
-echo "🚀 Installing Nginx and Certbot for SSL..."
-apt install -y nginx certbot python3-certbot-nginx
-systemctl enable nginx
-
-# Create webroot directory for ACME challenges
-mkdir -p /var/www/html/.well-known/acme-challenge
-chown -R www-data:www-data /var/www/html
-
-echo "🚀 Configuring Nginx reverse proxy for MinIO Console..."
-NGINX_CONF="/etc/nginx/sites-available/minio.conf"
-
-# Create initial Nginx configuration without SSL
-cat <<EOF > $NGINX_CONF
+# Update Nginx configuration to listen on IPv6 and proxy port 9001
+cat << EOF > /etc/nginx/sites-available/minio.conf
 server {
     listen 80;
     listen [::]:80;
     server_name $DOMAIN;
-    root /var/www/html;
 
-    # Dedicated location for ACME challenge
+    # Allow ACME challenge for Let's Encrypt
     location ^~ /.well-known/acme-challenge/ {
-        default_type "text/plain";
+        allow all;
         root /var/www/html;
     }
 
-    # Proxy all other traffic to MinIO
+    # Proxy to MinIO Console
     location / {
-        proxy_pass http://127.0.0.1:9001;
+        proxy_pass http://[::1]:9001;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
@@ -165,81 +185,33 @@ server {
 }
 EOF
 
-# Enable the site and remove default
+# Enable the site and restart Nginx
 rm -f /etc/nginx/sites-enabled/default
-ln -sf $NGINX_CONF /etc/nginx/sites-enabled/minio.conf
-
-# Test and reload Nginx
+ln -sf /etc/nginx/sites-available/minio.conf /etc/nginx/sites-enabled/
 nginx -t && systemctl restart nginx
 
-echo "⏳ Waiting for DNS propagation (30 seconds)..."
-sleep 30
+echo """
+📝 Configuration Summary:
+1. DuckDNS IPv6 update script: $DUCKDNS_SCRIPT
+2. Domain: $DOMAIN
+3. Local MinIO Console: http://[::1]:9001
+4. Public access: http://$DOMAIN
+5. Ports opened: 80, 443, 9001
+6. Current IPv6: $(ip -6 addr show scope global | grep -v deprecated | grep -oP '(?<=inet6 )[0-9a-f:]+' | head -n 1)
 
-# Verify DNS resolution
-echo "🔍 Checking DNS resolution..."
-host $DOMAIN || echo "Warning: DNS resolution failed"
+To test IPv6 connectivity:
+1. curl -6 http://$DOMAIN
+2. Check DuckDNS logs: cat ~/duckdns/duck.log
+3. View IPv6 address: ip -6 addr show scope global
+"""
 
-# Check DuckDNS update status
-echo "🔍 Checking DuckDNS update status..."
-cat ~/duckdns/duck.log
+# Final verification
+echo "🔍 Running final checks..."
+echo "1. Testing IPv6 connectivity..."
+curl -6 --connect-timeout 5 http://$DOMAIN || echo "⚠️ IPv6 connection failed"
 
-# Test HTTP accessibility
-echo "🔍 Testing HTTP accessibility..."
-curl -v http://$DOMAIN >/dev/null 2>&1
-if [ $? -eq 0 ]; then
-    echo "✓ HTTP is accessible"
-else
-    echo "⚠️ HTTP is not accessible"
-fi
+echo "2. Checking DuckDNS record..."
+host -t AAAA $DOMAIN || echo "⚠️ No AAAA record found"
 
-echo "🚀 Obtaining SSL certificate with Certbot..."
-# Try to obtain certificate
-if certbot --nginx \
-    --redirect \
-    --agree-tos \
-    --non-interactive \
-    -d $DOMAIN \
-    -m $EMAIL \
-    --preferred-challenges http; then
-    
-    echo "✅ SSL setup complete."
-    echo "➡️  Access MinIO at: https://$DOMAIN"
-else
-    echo "⚠️ Certbot failed. Running diagnostics..."
-    
-    # Check if ports are open
-    echo "1. Checking ports..."
-    nc -zv $DOMAIN 80
-    nc -zv $DOMAIN 443
-    
-    # Check DNS resolution
-    echo "2. Checking DNS..."
-    dig +short $DOMAIN
-    
-    # Check Nginx status
-    echo "3. Checking Nginx status..."
-    systemctl status nginx --no-pager
-    
-    # Check Nginx logs
-    echo "4. Last 10 lines of Nginx error log..."
-    tail -n 10 /var/log/nginx/error.log
-    
-    echo "
-⚠️ SSL certificate could not be obtained. Please:
-1. Verify that $DOMAIN points to $(curl -s4 ifconfig.me)
-2. Check that ports 80 and 443 are open:
-   sudo ufw allow 80/tcp
-   sudo ufw allow 443/tcp
-3. Try running manually:
-   sudo certbot --nginx -d $DOMAIN
-"
-fi
-
-# Final status check
-echo "
-📝 Final Status:
-1. Nginx Configuration: $(nginx -t 2>&1 >/dev/null && echo "✅ OK" || echo "❌ Failed")
-2. DNS Resolution: $(host $DOMAIN >/dev/null 2>&1 && echo "✅ OK" || echo "❌ Failed")
-3. HTTP Port (80): $(nc -z $DOMAIN 80 2>/dev/null && echo "✅ Open" || echo "❌ Closed")
-4. HTTPS Port (443): $(nc -z $DOMAIN 443 2>/dev/null && echo "✅ Open" || echo "❌ Closed")
-"
+echo "3. Verifying port 9001..."
+nc -z -v localhost 9001 || echo "⚠️ Port 9001 not accessible locally"
