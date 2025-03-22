@@ -88,25 +88,30 @@ echo "➡️  MinIO API: http://127.0.0.1:9000"
 
 echo ""
 echo "🔧 Configuring DuckDNS with: $DOMAIN"
-mkdir -p /opt/duckdns
-DUCKDNS_SCRIPT="/opt/duckdns/duck.sh"
+
+# Create DuckDNS directory in home
 mkdir -p ~/duckdns
-DUCKDNS_SCRIPT="~/duckdns/duck.sh"
-echo '#!/bin/bash' > "$DUCKDNS_SCRIPT"
-echo 'echo url="https://www.duckdns.org/update?domains=$DUCKDNS_SUBDOMAIN&token=$DUCKDNS_TOKEN&ip=" | curl -k -o ~/duckdns/duck.log -K -' >> "$DUCKDNS_SCRIPT"
+DUCKDNS_SCRIPT=~/duckdns/duck.sh
+
+# Create the update script with proper variable interpolation
+cat << 'EOF' > "$DUCKDNS_SCRIPT"
+#!/bin/bash
+DUCKDNS_TOKEN="$1"
+DUCKDNS_SUBDOMAIN="$2"
+echo url="https://www.duckdns.org/update?domains=${DUCKDNS_SUBDOMAIN}&token=${DUCKDNS_TOKEN}&ip=" | curl -k -o ~/duckdns/duck.log -K -
+EOF
+
+# Make the script executable
 chmod 700 "$DUCKDNS_SCRIPT"
 
 # Test DuckDNS script once manually
-bash "$DUCKDNS_SCRIPT"
+bash "$DUCKDNS_SCRIPT" "$DUCKDNS_TOKEN" "$DUCKDNS_SUBDOMAIN"
 
-# Set cron job
-crontab -l 2>/dev/null | grep -v "$DUCKDNS_SCRIPT" > /tmp/cron.tmp || true
-echo "*/5 * * * * $DUCKDNS_SCRIPT >/dev/null 2>&1" >> /tmp/cron.tmp
-crontab /tmp/cron.tmp
-rm /tmp/cron.tmp
+# Set up cron job
+(crontab -l 2>/dev/null | grep -v "$DUCKDNS_SCRIPT"; echo "*/5 * * * * $DUCKDNS_SCRIPT '$DUCKDNS_TOKEN' '$DUCKDNS_SUBDOMAIN' >/dev/null 2>&1") | crontab -
 
-echo "✅ DuckDNS update script created at $DUCKDNS_SCRIPT."
-echo "✅ Cron job set to run every 5 minutes."
+echo "✅ DuckDNS update script created at $DUCKDNS_SCRIPT"
+echo "✅ Cron job set to run every 5 minutes"
 
 #########################################
 # Exposing MinIO with Nginx and SSL    #
