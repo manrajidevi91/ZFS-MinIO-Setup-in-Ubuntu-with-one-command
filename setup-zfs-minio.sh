@@ -77,29 +77,24 @@ echo "➡️  MinIO API: http://127.0.0.1:9000"
 echo ""
 echo "🔧 DuckDNS Configuration..."
 read -p "Do you want to use DuckDNS for dynamic DNS? (y/n): " USE_DUCKDNS
-case "$USE_DUCKDNS" in
-  [yY])
-    read -p "Enter your DuckDNS API token: " DUCKDNS_TOKEN
-    read -p "Enter your DuckDNS subdomain (without .duckdns.org): " DUCKDNS_SUBDOMAIN
-    DOMAIN="$DUCKDNS_SUBDOMAIN.duckdns.org"
+if [[ "$USE_DUCKDNS" == "y" || "$USE_DUCKDNS" == "Y" ]]; then
+  read -p "Enter your DuckDNS API token: " DUCKDNS_TOKEN
+  read -p "Enter your DuckDNS subdomain (without .duckdns.org): " DUCKDNS_SUBDOMAIN
+  DOMAIN="$DUCKDNS_SUBDOMAIN.duckdns.org"
 
-    DUCKDNS_SCRIPT="/usr/local/bin/update-duckdns.sh"
-    cat <<EOD > "$DUCKDNS_SCRIPT"
-#!/bin/bash
-curl -k "https://www.duckdns.org/update?domains=${DUCKDNS_SUBDOMAIN}&token=${DUCKDNS_TOKEN}&ip="
-EOD
-    chmod +x "$DUCKDNS_SCRIPT"
+  DUCKDNS_SCRIPT="/usr/local/bin/update-duckdns.sh"
+  echo "#!/bin/bash" > "$DUCKDNS_SCRIPT"
+  echo "curl -k \"https://www.duckdns.org/update?domains=${DUCKDNS_SUBDOMAIN}&token=${DUCKDNS_TOKEN}&ip=\"" >> "$DUCKDNS_SCRIPT"
+  chmod +x "$DUCKDNS_SCRIPT"
 
-    echo "✅ DuckDNS update script created at $DUCKDNS_SCRIPT."
-    echo "🚀 Setting up cron job to update DuckDNS every 10 minutes..."
-    (crontab -l 2>/dev/null; echo "*/10 * * * * $DUCKDNS_SCRIPT >/dev/null 2>&1") | crontab -
-    echo "✅ DuckDNS cron job set."
-    ;;
-  *)
-    echo "✅ DuckDNS configuration skipped."
-    read -p "Enter your domain name for MinIO (e.g. minio.example.com): " DOMAIN
-    ;;
-esac
+  echo "✅ DuckDNS update script created at $DUCKDNS_SCRIPT."
+  echo "🚀 Setting up cron job to update DuckDNS every 10 minutes..."
+  (crontab -l 2>/dev/null; echo "*/10 * * * * $DUCKDNS_SCRIPT >/dev/null 2>&1") | crontab -
+  echo "✅ DuckDNS cron job set."
+else
+  echo "✅ DuckDNS configuration skipped."
+  read -p "Enter your domain name for MinIO (e.g. minio.example.com): " DOMAIN
+fi
 
 read -p "Enter your email for SSL certificate registration: " EMAIL
 
