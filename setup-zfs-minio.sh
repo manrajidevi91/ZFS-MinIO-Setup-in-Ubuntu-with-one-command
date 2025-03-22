@@ -26,6 +26,10 @@ echo "📂 Mounting at /mnt/minio..."
 mkdir -p /mnt/minio
 zfs set mountpoint=/mnt/minio zpool1/minio
 
+#############################
+# MinIO Installation       #
+#############################
+
 echo "🚀 Installing MinIO Server..."
 useradd -r minio-user || true
 mkdir -p /mnt/minio/{data,config}
@@ -70,29 +74,15 @@ echo ""
 echo "🚀 Installing Nginx and Certbot for SSL..."
 apt install -y nginx certbot python3-certbot-nginx
 
-echo "🚀 Configuring Nginx reverse proxy for MinIO Console..."
 read -p "Enter your domain name for MinIO (e.g. minio.example.com): " DOMAIN
 read -p "Enter your email for SSL certificate registration: " EMAIL
 
+echo "🚀 Configuring Nginx reverse proxy for MinIO Console..."
 NGINX_CONF="/etc/nginx/sites-available/minio.conf"
 cat <<EOF > $NGINX_CONF
 server {
     listen 80;
     server_name $DOMAIN;
-    location / {
-        return 301 https://\$host\$request_uri;
-    }
-}
-
-server {
-    listen 443 ssl;
-    server_name $DOMAIN;
-
-    ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_prefer_server_ciphers on;
-
     location / {
         proxy_pass http://127.0.0.1:9001;
         proxy_set_header Host \$host;
@@ -105,7 +95,7 @@ ln -sf $NGINX_CONF /etc/nginx/sites-enabled/minio.conf
 nginx -t && systemctl reload nginx
 
 echo "🚀 Obtaining SSL certificate with Certbot..."
-certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m $EMAIL
+certbot --nginx --redirect --agree-tos --non-interactive -d $DOMAIN -m $EMAIL
 
 echo "✅ SSL setup complete."
 echo "➡️  Access MinIO at: https://$DOMAIN"
