@@ -7,18 +7,25 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-# Verify domain and email
+# Set variables
 DOMAIN="zfs-minio.duckdns.org"
 EMAIL="manrajidevi91@gmail.com"
 
 echo "🔒 Setting up SSL for $DOMAIN..."
 echo "📧 Using email: $EMAIL"
-echo "⚠️ Please verify these details are correct (y/n)?"
-read -r confirm
 
-if [[ ! $confirm =~ ^[Yy]$ ]]; then
-    echo "❌ Setup cancelled"
-    exit 1
+# Check if script is being piped (automated execution)
+if [ -t 0 ]; then
+    # Interactive mode
+    echo "⚠️ Please verify these details are correct (y/n)?"
+    read -r confirm
+    if [[ ! $confirm =~ ^[Yy]$ ]]; then
+        echo "❌ Setup cancelled"
+        exit 1
+    fi
+else
+    # Non-interactive mode (being piped)
+    echo "🔄 Running in automated mode..."
 fi
 
 echo "🔒 Setting up SSL for zfs-minio.duckdns.org..."
