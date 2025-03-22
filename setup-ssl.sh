@@ -1,6 +1,26 @@
 #!/bin/bash
 set -e
 
+# Check if running as root
+if [ "$EUID" -ne 0 ]; then 
+    echo "Please run as root (use sudo)"
+    exit 1
+fi
+
+# Verify domain and email
+DOMAIN="zfs-minio.duckdns.org"
+EMAIL="manrajidevi91@gmail.com"
+
+echo "🔒 Setting up SSL for $DOMAIN..."
+echo "📧 Using email: $EMAIL"
+echo "⚠️ Please verify these details are correct (y/n)?"
+read -r confirm
+
+if [[ ! $confirm =~ ^[Yy]$ ]]; then
+    echo "❌ Setup cancelled"
+    exit 1
+fi
+
 echo "🔒 Setting up SSL for zfs-minio.duckdns.org..."
 
 # Stop Nginx temporarily
