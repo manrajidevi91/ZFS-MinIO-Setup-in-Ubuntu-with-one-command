@@ -5,6 +5,18 @@ set -e
 # ZFS + MinIO Setup Section #
 #############################
 
+DUCKDNS_TOKEN="$1"
+DUCKDNS_SUBDOMAIN="$2"
+EMAIL="$3"
+
+if [[ -z "$DUCKDNS_TOKEN" || -z "$DUCKDNS_SUBDOMAIN" || -z "$EMAIL" ]]; then
+  echo "❌ Error: Please provide all three arguments - DuckDNS token, subdomain, and email."
+  echo "Usage: bash setup.sh <DUCKDNS_TOKEN> <SUBDOMAIN> <EMAIL>"
+  exit 1
+fi
+
+DOMAIN="$DUCKDNS_SUBDOMAIN.duckdns.org"
+
 echo "🚀 Installing ZFS..."
 apt update
 apt install -y zfsutils-linux
@@ -70,73 +82,25 @@ echo "✅ MinIO setup complete!"
 echo "➡️  MinIO Console: http://127.0.0.1:9001"
 echo "➡️  MinIO API: http://127.0.0.1:9000"
 
-#############################
-# DuckDNS Configuration     #
-#############################
+#########################################
+# DuckDNS (Dynamic DNS) Configuration  #
+#########################################
 
 echo ""
-echo "🔧 DuckDNS Configuration..."
+echo "🔧 Configuring DuckDNS with: $DOMAIN"
+DUCKDNS_SCRIPT="/usr/local/bin/update-duckdns.sh"
+echo "#!/bin/bash" > "$DUCKDNS_SCRIPT"
+echo "curl -k \"https://www.duckdns.org/update?domains=${DUCKDNS_SUBDOMAIN}&token=${DUCKDNS_TOKEN}&ip=\"" >> "$DUCKDNS_SCRIPT"
+chmod +x "$DUCKDNS_SCRIPT"
 
-# If command-line arguments for DuckDNS token and subdomain are provided, use them.
-if [[ -n "$1" && -n "$2" ]]; then
-  DUCKDNS_TOKEN="$1"
-  DUCKDNS_SUBDOMAIN="$2"
-  USE_DUCKDNS="y"
-  EMAIL_ARG="$3"  # optional email argument
-else
-  read -p "Do you want to use DuckDNS for dynamic DNS? (y/n): " USE_DUCKDNS
-fi
+echo "✅ DuckDNS update script created at $DUCKDNS_SCRIPT."
+echo "🚀 Setting up cron job to update DuckDNS every 10 minutes..."
+(crontab -l 2>/dev/null; echo "*/10 * * * * $DUCKDNS_SCRIPT >/dev/null 2>&1") | crontab -
+echo "✅ DuckDNS cron job set."
 
-if [[ "$USE_DUCKDNS" =~ ^[Yy]$ ]]; then
-  # If not provided via arguments, prompt for the token.
-  if [[ -z "$DUCKDNS_TOKEN" ]]; then
-    read -p "Enter your DuckDNS API token: " DUCKDNS_TOKEN
-  fi
-
-  # If not provided via arguments, prompt for the subdomain.
-  if [[ -z "$DUCKDNS_SUBDOMAIN" ]]; then
-    read -p "Enter your DuckDNS subdomain (without .duckdns.org): " DUCKDNS_SUBDOMAIN
-  fi
-
-  DOMAIN="${DUCKDNS_SUBDOMAIN}.duckdns.org"
-
-  # For email, use the provided argument if available; otherwise prompt.
-  if [[ -z "$EMAIL_ARG" ]]; then
-    read -p "Enter your email for SSL certificate registration: " EMAIL
-  else
-    EMAIL="$EMAIL_ARG"
-  fi
-
-  DUCKDNS_SCRIPT="/usr/local/bin/update-duckdns.sh"
-  cat <<EOF > "$DUCKDNS_SCRIPT"
-#!/bin/bash
-curl -k "https://www.duckdns.org/update?domains=${DUCKDNS_SUBDOMAIN}&token=${DUCKDNS_TOKEN}&ip="
-EOF
-  chmod +x "$DUCKDNS_SCRIPT"
-
-  echo "✅ DuckDNS update script created at $DUCKDNS_SCRIPT."
-  echo "🚀 Setting up cron job to update DuckDNS every 10 minutes..."
-  (crontab -l 2>/dev/null; echo "*/10 * * * * $DUCKDNS_SCRIPT >/dev/null 2>&1") | crontab -
-  echo "✅ DuckDNS cron job set."
-  echo "✅ DuckDNS configuration completed."
-  echo "  Domain: $DOMAIN"
-  echo "  Email: $EMAIL"
-else
-  echo "✅ DuckDNS configuration skipped."
-  # Prompt for domain manually if DuckDNS is not used.
-  while true; do
-    read -p "Enter your domain name for MinIO (e.g. minio.example.com): " DOMAIN
-    if [[ -n "$DOMAIN" ]]; then
-      break
-    fi
-    echo "Error: Domain cannot be empty. Please provide a valid domain."
-  done
-  read -p "Enter your email for SSL certificate registration: " EMAIL
-fi
-
-#############################
+#########################################
 # Exposing MinIO with Nginx and SSL    #
-#############################
+#########################################
 
 echo ""
 echo "🚀 Installing Nginx and Certbot for SSL..."
@@ -160,7 +124,7 @@ ln -sf $NGINX_CONF /etc/nginx/sites-enabled/minio.conf
 nginx -t && systemctl reload nginx
 
 echo "🚀 Obtaining SSL certificate with Certbot..."
-certbot --nginx --redirect --agree-tos --non-interactive -d "$DOMAIN" -m "$EMAIL"
+certbot --nginx --redirect --agree-tos --non-interactive -d $DOMAIN -m $EMAIL
 
 echo "✅ SSL setup complete."
 echo "➡️  Access MinIO at: https://$DOMAIN"
