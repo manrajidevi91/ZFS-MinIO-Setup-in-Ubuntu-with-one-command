@@ -81,10 +81,8 @@ if [ "$USE_DUCKDNS" = "y" ] || [ "$USE_DUCKDNS" = "Y" ]; then
     read -p "Enter your DuckDNS subdomain (without .duckdns.org): " DUCKDNS_SUBDOMAIN
     DOMAIN="$DUCKDNS_SUBDOMAIN.duckdns.org"
     DUCKDNS_SCRIPT="/usr/local/bin/update-duckdns.sh"
-    cat <<EOD > $DUCKDNS_SCRIPT
-#!/bin/bash
-curl -k "https://www.duckdns.org/update?domains=${DUCKDNS_SUBDOMAIN}&token=${DUCKDNS_TOKEN}&ip="
-EOD
+    echo "#!/bin/bash" > $DUCKDNS_SCRIPT
+    echo "curl -k \"https://www.duckdns.org/update?domains=${DUCKDNS_SUBDOMAIN}&token=${DUCKDNS_TOKEN}&ip=\"" >> $DUCKDNS_SCRIPT
     chmod +x $DUCKDNS_SCRIPT
     echo "✅ DuckDNS update script created at $DUCKDNS_SCRIPT."
     echo "🚀 Setting up cron job to update DuckDNS every 10 minutes..."
