@@ -70,6 +70,9 @@ echo "✅ MinIO setup complete!"
 echo "➡️  MinIO Console: http://127.0.0.1:9001"
 echo "➡️  MinIO API: http://127.0.0.1:9000"
 
+#!/bin/bash
+set -e
+
 #########################################
 # DuckDNS (Dynamic DNS) Configuration  #
 #########################################
@@ -97,6 +100,12 @@ EOF
 else
   echo "✅ DuckDNS configuration skipped."
   read -p "Enter your domain name for MinIO (e.g. minio.example.com): " DOMAIN
+fi
+
+# Check that a valid domain is provided
+if [[ -z "$DOMAIN" ]]; then
+  echo "Error: Domain cannot be empty. Please provide a valid domain."
+  exit 1
 fi
 
 read -p "Enter your email for SSL certificate registration: " EMAIL
@@ -127,7 +136,7 @@ ln -sf $NGINX_CONF /etc/nginx/sites-enabled/minio.conf
 nginx -t && systemctl reload nginx
 
 echo "🚀 Obtaining SSL certificate with Certbot..."
-certbot --nginx --redirect --agree-tos --non-interactive -d $DOMAIN -m $EMAIL
+certbot --nginx --redirect --agree-tos --non-interactive -d "$DOMAIN" -m "$EMAIL"
 
 echo "✅ SSL setup complete."
 echo "➡️  Access MinIO at: https://$DOMAIN"
