@@ -99,13 +99,14 @@ EOF
   echo "✅ DuckDNS cron job set."
 else
   echo "✅ DuckDNS configuration skipped."
-  read -p "Enter your domain name for MinIO (e.g. minio.example.com): " DOMAIN
-fi
-
-# Check that a valid domain is provided
-if [[ -z "$DOMAIN" ]]; then
-  echo "Error: Domain cannot be empty. Please provide a valid domain."
-  exit 1
+  # Prompt until a valid (non-empty) domain is provided
+  while true; do
+    read -p "Enter your domain name for MinIO (e.g. minio.example.com): " DOMAIN
+    if [[ -n "$DOMAIN" ]]; then
+      break
+    fi
+    echo "Error: Domain cannot be empty. Please provide a valid domain."
+  done
 fi
 
 read -p "Enter your email for SSL certificate registration: " EMAIL
