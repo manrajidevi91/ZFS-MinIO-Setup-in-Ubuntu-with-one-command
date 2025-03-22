@@ -123,20 +123,41 @@ apt install -y nginx certbot python3-certbot-nginx
 systemctl enable nginx
 systemctl start nginx
 
+# Create webroot directory for ACME challenges
+mkdir -p /var/www/html/.well-known/acme-challenge
+chown -R www-data:www-data /var/www/html
+
 echo "🚀 Configuring Nginx reverse proxy for MinIO Console..."
 NGINX_CONF="/etc/nginx/sites-available/minio.conf"
 
-# Create Nginx configuration
+# Create Nginx configuration with proper ACME challenge handling
 cat <<EOF > $NGINX_CONF
 server {
     listen 80;
+    listen [::]:80;
     server_name $DOMAIN;
+    root /var/www/html;
 
-    # Allow ACME challenge for Let's Encrypt
-    location /.well-known/acme-challenge/ {
-        allow all;
+    # Dedicated location for ACME challenge
+    location ^~ /.well-known/acme-challenge/ {
+        default_type "text/plain";
         root /var/www/html;
     }
+
+    # Redirect all other HTTP traffic to HTTPS
+    location / {
+        return 301 https://\$server_name\$request_uri;
+    }
+}
+
+# This server block will be configured by Certbot
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name $DOMAIN;
+    root /var/www/html;
+
+    # SSL configuration will be added by Certbot
 
     location / {
         proxy_pass http://127.0.0.1:9001;
@@ -149,47 +170,79 @@ server {
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
+
+        # Timeouts
+        proxy_connect_timeout 300;
+        proxy_send_timeout 300;
+        proxy_read_timeout 300;
+        send_timeout 300;
     }
 }
 EOF
 
-# Enable the site and test configuration
+# Enable the site and remove default
+rm -f /etc/nginx/sites-enabled/default
 ln -sf $NGINX_CONF /etc/nginx/sites-enabled/minio.conf
-rm -f /etc/nginx/sites-enabled/default  # Remove default site
+
+# Test and reload Nginx
 nginx -t && systemctl reload nginx
 
-echo "⏳ Waiting for DNS propagation (60 seconds)..."
-sleep 60  # Wait for DNS to propagate
+echo "⏳ Waiting for DNS propagation (30 seconds)..."
+sleep 30
 
-# Check if ports 80 and 443 are accessible
-echo "🔍 Checking if ports are accessible..."
-nc -zv localhost 80 || echo "Warning: Port 80 might not be accessible"
-nc -zv localhost 443 || echo "Warning: Port 443 might not be accessible"
+# Verify DNS resolution
+echo "🔍 Checking DNS resolution..."
+host $DOMAIN || echo "Warning: DNS resolution failed"
+
+# Check DuckDNS update status
+echo "🔍 Checking DuckDNS update status..."
+cat ~/duckdns/duck.log
+
+echo "🔍 Testing ACME challenge path..."
+curl -v http://$DOMAIN/.well-known/acme-challenge/test 2>&1 | grep "404"
+if [ $? -eq 0 ]; then
+    echo "✓ ACME challenge path is accessible (404 is expected for test file)"
+fi
 
 echo "🚀 Obtaining SSL certificate with Certbot..."
-# Try obtaining the certificate with DNS challenge if HTTP challenge fails
-if ! certbot --nginx --redirect --agree-tos --non-interactive -d $DOMAIN -m $EMAIL; then
-    echo "⚠️ HTTP challenge failed, trying DNS challenge..."
-    certbot certonly --manual --preferred-challenges=dns \
-        --agree-tos --non-interactive -d $DOMAIN -m $EMAIL \
-        --manual-auth-hook "/bin/true" \
-        --manual-cleanup-hook "/bin/true"
-fi
+certbot --nginx \
+    --redirect \
+    --agree-tos \
+    --non-interactive \
+    -d $DOMAIN \
+    -m $EMAIL \
+    --preferred-challenges http \
+    --verbose
 
-# Verify SSL certificate was obtained
-if [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
+if [ $? -ne 0 ]; then
+    echo "⚠️ Certbot failed. Checking system status..."
+    echo "1. Nginx Status:"
+    systemctl status nginx
+    echo "2. Nginx Error Log:"
+    tail -n 20 /var/log/nginx/error.log
+    echo "3. Certbot Log:"
+    tail -n 20 /var/log/letsencrypt/letsencrypt.log
+    echo "4. Current DNS Resolution:"
+    dig +short $DOMAIN
+    echo "5. HTTP Access Test:"
+    curl -v http://$DOMAIN 2>&1
+
+    echo "
+⚠️ SSL certificate could not be obtained. Please check:
+1. Is your DuckDNS domain ($DOMAIN) pointing to this server's IP?
+2. Are ports 80 and 443 open in your firewall?
+3. Can you access http://$DOMAIN from the internet?
+4. Try running manually:
+   sudo certbot --nginx -d $DOMAIN --preferred-challenges http
+"
+else
     echo "✅ SSL setup complete."
     echo "➡️  Access MinIO at: https://$DOMAIN"
-else
-    echo "⚠️ SSL setup incomplete. You can still access MinIO at: http://$DOMAIN"
-    echo "To manually obtain SSL certificate later, run:"
-    echo "certbot --nginx -d $DOMAIN"
 fi
 
-# Add note about firewall
-echo ""
-echo "📝 Important Notes:"
-echo "1. Ensure ports 80 and 443 are open in your firewall"
-echo "2. Run these commands if needed:"
-echo "   sudo ufw allow 80/tcp"
-echo "   sudo ufw allow 443/tcp"
+# Add port opening instructions
+echo "
+📝 Important: Make sure these ports are open in your firewall:
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+"
