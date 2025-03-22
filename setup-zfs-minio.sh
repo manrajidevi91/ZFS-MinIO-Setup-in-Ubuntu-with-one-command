@@ -79,37 +79,40 @@ set -e
 
 echo ""
 echo "🔧 DuckDNS Configuration..."
-read -p "Do you want to use DuckDNS for dynamic DNS? (y/n): " USE_DUCKDNS
 
-if [[ "$USE_DUCKDNS" =~ ^[Yy]$ ]]; then
-  read -p "Enter your DuckDNS API token: " DUCKDNS_TOKEN
-  read -p "Enter your DuckDNS subdomain (without .duckdns.org): " DUCKDNS_SUBDOMAIN
-  DOMAIN="${DUCKDNS_SUBDOMAIN}.duckdns.org"
+# Check for required arguments
+if [ "$#" -lt 2 ]; then
+  echo "Usage: $0 <DuckDNS_Token> <DuckDNS_Subdomain> <Email_Address>(Optional)"
+  echo "  - DuckDNS_Token: Your DuckDNS API token."
+  echo "  - DuckDNS_Subdomain: Your DuckDNS subdomain (without .duckdns.org)."
+  echo "  - Email_Address: Your email for SSL certificate registration (optional, but recommended)."
+  echo "Example: $0 your_duckdns_token yoursubdomain user@example.com"
+  exit 1
+fi
 
-  DUCKDNS_SCRIPT="/usr/local/bin/update-duckdns.sh"
-  cat <<EOF > "$DUCKDNS_SCRIPT"
+DUCKDNS_TOKEN="$1"
+DUCKDNS_SUBDOMAIN="$2"
+EMAIL="$3" # Added email
+
+DOMAIN="${DUCKDNS_SUBDOMAIN}.duckdns.org"
+
+DUCKDNS_SCRIPT="/usr/local/bin/update-duckdns.sh"
+cat <<EOF > "$DUCKDNS_SCRIPT"
 #!/bin/bash
 curl -k "https://www.duckdns.org/update?domains=${DUCKDNS_SUBDOMAIN}&token=${DUCKDNS_TOKEN}&ip="
 EOF
-  chmod +x "$DUCKDNS_SCRIPT"
+chmod +x "$DUCKDNS_SCRIPT"
 
-  echo "✅ DuckDNS update script created at $DUCKDNS_SCRIPT."
-  echo "🚀 Setting up cron job to update DuckDNS every 10 minutes..."
-  (crontab -l 2>/dev/null; echo "*/10 * * * * $DUCKDNS_SCRIPT >/dev/null 2>&1") | crontab -
-  echo "✅ DuckDNS cron job set."
-else
-  echo "✅ DuckDNS configuration skipped."
-  # Prompt until a valid (non-empty) domain is provided
-  while true; do
-    read -p "Enter your domain name for MinIO (e.g. minio.example.com): " DOMAIN
-    if [[ -n "$DOMAIN" ]]; then
-      break
-    fi
-    echo "Error: Domain cannot be empty. Please provide a valid domain."
-  done
+echo "✅ DuckDNS update script created at $DUCKDNS_SCRIPT."
+echo "🚀 Setting up cron job to update DuckDNS every 10 minutes..."
+(crontab -l 2>/dev/null; echo "*/10 * * * * $DUCKDNS_SCRIPT >/dev/null 2>&1") | crontab -
+echo "✅ DuckDNS cron job set."
+
+echo "✅ DuckDNS configuration completed."
+echo "  Domain: $DOMAIN"
+if [ -n "$EMAIL" ]; then
+  echo "  Email: $EMAIL"
 fi
-
-read -p "Enter your email for SSL certificate registration: " EMAIL
 
 #########################################
 # Exposing MinIO with Nginx and SSL    #
