@@ -117,6 +117,22 @@ cd E:\Work\Server\MinIO
 
 ---
 
+🧩 Proxmox VM Disk Passthrough (Optional)
+If you're running this setup in Proxmox, and you want to passthrough a disk from one VM (e.g., vm-101) to another (e.g., vm-100), you can use the following command:
+
+bash
+Copy
+Edit
+qm set 100 -virtio1 /dev/pve/vm-101-disk-0
+🔍 Explanation:
+qm set 100: Configure VM with ID 100
+
+-virtio1: Attach the disk as a virtio drive on slot 1
+
+/dev/pve/vm-101-disk-0: Path to the disk used by VM 101 (must be unused or detached)
+
+📝 Make sure the disk is not currently attached or in use by another VM before assigning it.
+
 ## 🛡️ Notes
 
 - You can modify disk path `/dev/sdb` or bucket name `video-bucket` in the scripts.
