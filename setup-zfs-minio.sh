@@ -103,7 +103,7 @@ crontab /tmp/cron.tmp
 rm /tmp/cron.tmp
 
 echo "✅ DuckDNS update script created at $DUCKDNS_SCRIPT."
-echo "✅ Cron job set to run every 5 minutes.""
+echo "✅ Cron job set to run every 5 minutes."
 
 #########################################
 # Exposing MinIO with Nginx and SSL    #
