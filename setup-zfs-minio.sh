@@ -9,44 +9,29 @@ echo "🚀 Installing ZFS..."
 apt update
 apt install -y zfsutils-linux
 
-LOOP_FILE="/var/zfs_pool.img"
-LOOP_DEV="/dev/loop10"
+# List available partitions
+echo "🔍 Available disk partitions:"
+mapfile -t PARTS < <(lsblk -dpno NAME,SIZE | grep -v "loop")
+for i in "${!PARTS[@]}"; do
+    echo "$((i+1)). ${PARTS[$i]}"
+done
 
-# Check if the ZFS pool or loop file already exists
-if [ -e "$LOOP_FILE" ] || zpool list | grep -q '^zpool1'; then
-  echo "✅ ZFS pool or loop file already exists. Skipping creation step."
+# Ask user to select a partition
+read -p "📦 Enter the number of the partition to use for ZFS pool (careful: data will be erased): " PART_INDEX
+PART_INDEX=$((PART_INDEX-1))
+ZFS_DEVICE=$(echo "${PARTS[$PART_INDEX]}" | awk '{print $1}')
 
-  # Attach loop device if not already attached
-  if ! losetup | grep -q "$LOOP_FILE"; then
-    echo "🔄 Reattaching loop file to $LOOP_DEV..."
-    losetup $LOOP_DEV $LOOP_FILE
-  fi
-
-  # Import pool if not imported
-  if ! zpool list | grep -q '^zpool1'; then
-    echo "📦 Importing existing ZFS pool..."
-    zpool import -d /dev zpool1
-  fi
-else
-  echo "🔍 Calculating free space on root filesystem..."
-  free_kb=$(df --output=avail / | tail -1 | tr -d ' ')
-  free_bytes=$((free_kb * 1024))
-  margin=1073741824
-
-  if [ $free_bytes -le $margin ]; then
-    echo "❌ Not enough free space available on / to create the loop file."
+if [ -z "$ZFS_DEVICE" ]; then
+    echo "❌ Invalid selection. Exiting."
     exit 1
-  fi
+fi
 
-  loop_size=$((free_bytes - margin))
-  echo "✅ Free space: $free_bytes bytes. Creating loop file of size $loop_size bytes."
-
-  fallocate -l $loop_size $LOOP_FILE
-  losetup $LOOP_DEV $LOOP_FILE
-
-  echo "📦 Creating ZFS Pool (zpool1) on $LOOP_DEV..."
-  zpool create -f zpool1 "$LOOP_DEV"
-
+# Check if the pool already exists
+if zpool list | grep -q '^zpool1'; then
+  echo "✅ ZFS pool 'zpool1' already exists. Skipping creation."
+else
+  echo "📦 Creating ZFS Pool (zpool1) on $ZFS_DEVICE..."
+  zpool create -f zpool1 "$ZFS_DEVICE"
   echo "📁 Creating ZFS Dataset for MinIO..."
   zfs create zpool1/minio
 fi
@@ -140,38 +125,6 @@ echo "✅ SSL setup complete."
 echo "➡️  Access MinIO at: https://$DOMAIN"
 
 #########################################
-# Persisting ZFS Pool After Reboot     #
-#########################################
-
-echo ""
-echo "🔧 Creating systemd service to reattach loop device and import ZFS pool..."
-cat <<EOF >/etc/systemd/system/loop-zpool-import.service
-[Unit]
-Description=Reattach loop device and import ZFS pool
-DefaultDependencies=no
-Before=zfs-import.target
-After=local-fs.target
-
-[Service]
-Type=oneshot
-ExecStart=/sbin/losetup /dev/loop10 /var/zfs_pool.img
-ExecStartPost=/sbin/zpool import -d /dev zpool1
-RemainAfterExit=yes
-
-[Install]
-WantedBy=zfs-import.target
-EOF
-
-systemctl daemon-reload
-systemctl enable loop-zpool-import.service
-
-# Save ZFS cache
-zpool set cachefile=/etc/zfs/zpool.cache zpool1
-systemctl restart zfs-import-cache.service
-
-echo "✅ 'loop-zpool-import' service created and enabled."
-
-#########################################
 # DuckDNS (Dynamic DNS) Configuration  #
 #########################################
 
@@ -195,5 +148,4 @@ else
 fi
 
 echo ""
-echo "🔎 To check the loop file: losetup -a"
 echo "✅ Setup complete. Access MinIO at: https://$DOMAIN"
