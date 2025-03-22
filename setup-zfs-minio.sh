@@ -114,6 +114,7 @@ if [ -n "$EMAIL" ]; then
   echo "  Email: $EMAIL"
 fi
 
+
 #########################################
 # Exposing MinIO with Nginx and SSL    #
 #########################################
