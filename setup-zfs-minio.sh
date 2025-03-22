@@ -121,7 +121,6 @@ echo ""
 echo "🚀 Installing Nginx and Certbot for SSL..."
 apt install -y nginx certbot python3-certbot-nginx
 systemctl enable nginx
-systemctl start nginx
 
 # Create webroot directory for ACME challenges
 mkdir -p /var/www/html/.well-known/acme-challenge
@@ -130,7 +129,7 @@ chown -R www-data:www-data /var/www/html
 echo "🚀 Configuring Nginx reverse proxy for MinIO Console..."
 NGINX_CONF="/etc/nginx/sites-available/minio.conf"
 
-# Create Nginx configuration with proper ACME challenge handling
+# Create initial Nginx configuration without SSL
 cat <<EOF > $NGINX_CONF
 server {
     listen 80;
@@ -144,21 +143,7 @@ server {
         root /var/www/html;
     }
 
-    # Redirect all other HTTP traffic to HTTPS
-    location / {
-        return 301 https://\$server_name\$request_uri;
-    }
-}
-
-# This server block will be configured by Certbot
-server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
-    server_name $DOMAIN;
-    root /var/www/html;
-
-    # SSL configuration will be added by Certbot
-
+    # Proxy all other traffic to MinIO
     location / {
         proxy_pass http://127.0.0.1:9001;
         proxy_set_header Host \$host;
@@ -185,7 +170,7 @@ rm -f /etc/nginx/sites-enabled/default
 ln -sf $NGINX_CONF /etc/nginx/sites-enabled/minio.conf
 
 # Test and reload Nginx
-nginx -t && systemctl reload nginx
+nginx -t && systemctl restart nginx
 
 echo "⏳ Waiting for DNS propagation (30 seconds)..."
 sleep 30
@@ -198,51 +183,63 @@ host $DOMAIN || echo "Warning: DNS resolution failed"
 echo "🔍 Checking DuckDNS update status..."
 cat ~/duckdns/duck.log
 
-echo "🔍 Testing ACME challenge path..."
-curl -v http://$DOMAIN/.well-known/acme-challenge/test 2>&1 | grep "404"
+# Test HTTP accessibility
+echo "🔍 Testing HTTP accessibility..."
+curl -v http://$DOMAIN >/dev/null 2>&1
 if [ $? -eq 0 ]; then
-    echo "✓ ACME challenge path is accessible (404 is expected for test file)"
+    echo "✓ HTTP is accessible"
+else
+    echo "⚠️ HTTP is not accessible"
 fi
 
 echo "🚀 Obtaining SSL certificate with Certbot..."
-certbot --nginx \
+# Try to obtain certificate
+if certbot --nginx \
     --redirect \
     --agree-tos \
     --non-interactive \
     -d $DOMAIN \
     -m $EMAIL \
-    --preferred-challenges http \
-    --verbose
-
-if [ $? -ne 0 ]; then
-    echo "⚠️ Certbot failed. Checking system status..."
-    echo "1. Nginx Status:"
-    systemctl status nginx
-    echo "2. Nginx Error Log:"
-    tail -n 20 /var/log/nginx/error.log
-    echo "3. Certbot Log:"
-    tail -n 20 /var/log/letsencrypt/letsencrypt.log
-    echo "4. Current DNS Resolution:"
-    dig +short $DOMAIN
-    echo "5. HTTP Access Test:"
-    curl -v http://$DOMAIN 2>&1
-
-    echo "
-⚠️ SSL certificate could not be obtained. Please check:
-1. Is your DuckDNS domain ($DOMAIN) pointing to this server's IP?
-2. Are ports 80 and 443 open in your firewall?
-3. Can you access http://$DOMAIN from the internet?
-4. Try running manually:
-   sudo certbot --nginx -d $DOMAIN --preferred-challenges http
-"
-else
+    --preferred-challenges http; then
+    
     echo "✅ SSL setup complete."
     echo "➡️  Access MinIO at: https://$DOMAIN"
+else
+    echo "⚠️ Certbot failed. Running diagnostics..."
+    
+    # Check if ports are open
+    echo "1. Checking ports..."
+    nc -zv $DOMAIN 80
+    nc -zv $DOMAIN 443
+    
+    # Check DNS resolution
+    echo "2. Checking DNS..."
+    dig +short $DOMAIN
+    
+    # Check Nginx status
+    echo "3. Checking Nginx status..."
+    systemctl status nginx --no-pager
+    
+    # Check Nginx logs
+    echo "4. Last 10 lines of Nginx error log..."
+    tail -n 10 /var/log/nginx/error.log
+    
+    echo "
+⚠️ SSL certificate could not be obtained. Please:
+1. Verify that $DOMAIN points to $(curl -s4 ifconfig.me)
+2. Check that ports 80 and 443 are open:
+   sudo ufw allow 80/tcp
+   sudo ufw allow 443/tcp
+3. Try running manually:
+   sudo certbot --nginx -d $DOMAIN
+"
 fi
 
-# Add port opening instructions
+# Final status check
 echo "
-📝 Important: Make sure these ports are open in your firewall:
-sudo ufw allow 80/tcp
-sudo ufw allow 443/tcp
+📝 Final Status:
+1. Nginx Configuration: $(nginx -t 2>&1 >/dev/null && echo "✅ OK" || echo "❌ Failed")
+2. DNS Resolution: $(host $DOMAIN >/dev/null 2>&1 && echo "✅ OK" || echo "❌ Failed")
+3. HTTP Port (80): $(nc -z $DOMAIN 80 2>/dev/null && echo "✅ Open" || echo "❌ Closed")
+4. HTTPS Port (443): $(nc -z $DOMAIN 443 2>/dev/null && echo "✅ Open" || echo "❌ Closed")
 "
