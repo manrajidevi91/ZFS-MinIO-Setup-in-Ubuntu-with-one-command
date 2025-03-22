@@ -9,16 +9,28 @@ echo "🚀 Installing ZFS..."
 apt update
 apt install -y zfsutils-linux
 
-# Check if the ZFS pool already exists
-if zpool list | grep -q '^zpool1'; then
-  echo "✅ ZFS pool 'zpool1' already exists. Skipping loop file and pool creation."
+LOOP_FILE="/var/zfs_pool.img"
+LOOP_DEV="/dev/loop10"
+
+# Check if the ZFS pool or loop file already exists
+if [ -e "$LOOP_FILE" ] || zpool list | grep -q '^zpool1'; then
+  echo "✅ ZFS pool or loop file already exists. Skipping creation step."
+
+  # Attach loop device if not already attached
+  if ! losetup | grep -q "$LOOP_FILE"; then
+    echo "🔄 Reattaching loop file to $LOOP_DEV..."
+    losetup $LOOP_DEV $LOOP_FILE
+  fi
+
+  # Import pool if not imported
+  if ! zpool list | grep -q '^zpool1'; then
+    echo "📦 Importing existing ZFS pool..."
+    zpool import -d /dev zpool1
+  fi
 else
   echo "🔍 Calculating free space on root filesystem..."
-  # Get available space (in KB) on /
   free_kb=$(df --output=avail / | tail -1 | tr -d ' ')
   free_bytes=$((free_kb * 1024))
-
-  # Define a safety margin of 1GB (in bytes)
   margin=1073741824
 
   if [ $free_bytes -le $margin ]; then
@@ -26,19 +38,11 @@ else
     exit 1
   fi
 
-  # Calculate the size for the loop file (all free space minus margin)
   loop_size=$((free_bytes - margin))
-  echo "✅ Free space: $free_bytes bytes. Creating loop file of size $loop_size bytes (leaving a 1GB margin)."
+  echo "✅ Free space: $free_bytes bytes. Creating loop file of size $loop_size bytes."
 
-  # Define the loop file location
-  LOOP_FILE="/var/zfs_pool.img"
-
-  # Create the loop file (sparse file)
   fallocate -l $loop_size $LOOP_FILE
-
-  # Attach the loop file to a loop device
-  LOOP_DEV=$(losetup --find --show $LOOP_FILE)
-  echo "✅ Using loop device: $LOOP_DEV"
+  losetup $LOOP_DEV $LOOP_FILE
 
   echo "📦 Creating ZFS Pool (zpool1) on $LOOP_DEV..."
   zpool create -f zpool1 "$LOOP_DEV"
@@ -52,7 +56,6 @@ mkdir -p /mnt/minio
 zfs set mountpoint=/mnt/minio zpool1/minio
 
 echo "🚀 Installing MinIO Server..."
-# Create a dedicated user for MinIO if it doesn't exist
 useradd -r minio-user || true
 mkdir -p /mnt/minio/{data,config}
 chown -R minio-user:minio-user /mnt/minio
@@ -85,9 +88,8 @@ systemctl daemon-reload
 systemctl enable --now minio
 
 echo "✅ MinIO setup complete!"
-echo "➡️  MinIO Console is running on port 9001 (locally: http://127.0.0.1:9001)"
-echo "➡️  MinIO API is running on port 9000 (locally: http://127.0.0.1:9000)"
-
+echo "➡️  MinIO Console: http://127.0.0.1:9001"
+echo "➡️  MinIO API: http://127.0.0.1:9000"
 
 #########################################
 # Exposing MinIO with Nginx and SSL    #
@@ -135,34 +137,39 @@ echo "🚀 Obtaining SSL certificate with Certbot..."
 certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m $EMAIL
 
 echo "✅ SSL setup complete."
-echo "➡️  Access your MinIO Console at: https://$DOMAIN"
-
+echo "➡️  Access MinIO at: https://$DOMAIN"
 
 #########################################
-# Persisting ZFS Pool After Reboot       #
+# Persisting ZFS Pool After Reboot     #
 #########################################
 
 echo ""
-echo "🔧 Creating systemd service to reattach loop file and import ZFS pool on boot..."
+echo "🔧 Creating systemd service to reattach loop device and import ZFS pool..."
 cat <<EOF >/etc/systemd/system/loop-zpool-import.service
 [Unit]
 Description=Reattach loop device and import ZFS pool
+DefaultDependencies=no
+Before=zfs-import.target
 After=local-fs.target
 
 [Service]
 Type=oneshot
-ExecStart=/sbin/losetup --find --show /var/zfs_pool.img
+ExecStart=/sbin/losetup /dev/loop10 /var/zfs_pool.img
 ExecStartPost=/sbin/zpool import -d /dev zpool1
 RemainAfterExit=yes
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=zfs-import.target
 EOF
 
 systemctl daemon-reload
 systemctl enable loop-zpool-import.service
-echo "✅ 'loop-zpool-import' service created and enabled."
 
+# Save ZFS cache
+zpool set cachefile=/etc/zfs/zpool.cache zpool1
+systemctl restart zfs-import-cache.service
+
+echo "✅ 'loop-zpool-import' service created and enabled."
 
 #########################################
 # DuckDNS (Dynamic DNS) Configuration  #
@@ -173,7 +180,6 @@ read -p "Do you want to use DuckDNS for dynamic DNS? (y/n): " USE_DUCKDNS
 if [ "$USE_DUCKDNS" = "y" ] || [ "$USE_DUCKDNS" = "Y" ]; then
     read -p "Enter your DuckDNS API token: " DUCKDNS_TOKEN
     read -p "Enter your DuckDNS subdomain (without .duckdns.org): " DUCKDNS_SUBDOMAIN
-    # Create the DuckDNS update script
     DUCKDNS_SCRIPT="/usr/local/bin/update-duckdns.sh"
     cat <<EOF > $DUCKDNS_SCRIPT
 #!/bin/bash
@@ -189,5 +195,5 @@ else
 fi
 
 echo ""
-echo "🔎 To check the loop file details, run: losetup -a"
-echo "✅ Setup complete. Your MinIO Console is accessible at: https://$DOMAIN"
+echo "🔎 To check the loop file: losetup -a"
+echo "✅ Setup complete. Access MinIO at: https://$DOMAIN"
