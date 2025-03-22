@@ -9,9 +9,8 @@ echo "🚀 Installing ZFS..."
 apt update
 apt install -y zfsutils-linux
 
-echo "🔍 Detecting usable (non-system) partitions for ZFS pool..."
-# Filter only unmounted, non-root, writable disks (e.g., /dev/vdb)
-mapfile -t PARTS < <(lsblk -dpno NAME,SIZE,TYPE,MOUNTPOINT | grep "disk" | grep -vE "/|sr|rom|boot")
+echo "🔍 Detecting usable (non-system) disks for ZFS pool..."
+mapfile -t PARTS < <(lsblk -dpno NAME,SIZE,TYPE | grep "disk" | grep -vE "sr|rom")
 
 if [ ${#PARTS[@]} -eq 0 ]; then
   echo "❌ No suitable disks found for ZFS. Exiting."
