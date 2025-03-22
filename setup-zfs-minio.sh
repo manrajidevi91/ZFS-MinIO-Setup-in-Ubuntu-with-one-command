@@ -9,19 +9,21 @@ echo "🚀 Installing ZFS..."
 apt update
 apt install -y zfsutils-linux
 
-echo "🔍 Available partitions:"
-mapfile -t PARTS < <(lsblk -dpno NAME,SIZE,TYPE,MOUNTPOINT | grep "part")
+echo "🔍 Detecting usable (non-system) partitions for ZFS pool..."
+# Filter only unmounted, non-root, writable disks (e.g., /dev/vdb)
+mapfile -t PARTS < <(lsblk -dpno NAME,SIZE,TYPE,MOUNTPOINT | grep "disk" | grep -vE "/|sr|rom|boot")
 
 if [ ${#PARTS[@]} -eq 0 ]; then
-  echo "❌ No usable partitions found. Exiting."
+  echo "❌ No suitable disks found for ZFS. Exiting."
   exit 1
 fi
 
+echo "Available disks for ZFS pool creation:"
 for i in "${!PARTS[@]}"; do
     echo "$((i+1)). ${PARTS[$i]}"
 done
 
-read -p "📦 Enter the number of the partition to use for ZFS pool (⚠️ will ERASE data): " PART_INDEX
+read -p "📦 Enter the number of the disk to use for ZFS pool (⚠️ will ERASE data): " PART_INDEX
 
 # Validate input
 if ! [[ "$PART_INDEX" =~ ^[0-9]+$ ]] || [ "$PART_INDEX" -lt 1 ] || [ "$PART_INDEX" -gt "${#PARTS[@]}" ]; then
@@ -32,18 +34,8 @@ fi
 PART_INDEX=$((PART_INDEX - 1))
 SELECTED_LINE="${PARTS[$PART_INDEX]}"
 ZFS_DEVICE=$(echo "$SELECTED_LINE" | awk '{print $1}')
-MOUNTPOINT=$(echo "$SELECTED_LINE" | awk '{print $4}')
 
-if [ "$MOUNTPOINT" != "" ]; then
-  echo "⚠️ WARNING: The selected partition ($ZFS_DEVICE) is mounted on $MOUNTPOINT."
-  read -p "❌ This will ERASE your current system. Are you sure? (type YES to continue): " CONFIRM
-  if [ "$CONFIRM" != "YES" ]; then
-    echo "❌ Operation cancelled."
-    exit 1
-  fi
-fi
-
-# Check if the pool already exists
+# Create ZFS pool
 if zpool list | grep -q '^zpool1'; then
   echo "✅ ZFS pool 'zpool1' already exists. Skipping creation."
 else
