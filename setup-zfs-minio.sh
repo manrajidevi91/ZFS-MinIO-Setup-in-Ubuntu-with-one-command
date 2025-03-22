@@ -71,15 +71,39 @@ echo "➡️  MinIO Console: http://127.0.0.1:9001"
 echo "➡️  MinIO API: http://127.0.0.1:9000"
 
 #########################################
+# DuckDNS (Dynamic DNS) Configuration  #
+#########################################
+
+echo ""
+read -p "Do you want to use DuckDNS for dynamic DNS? (y/n): " USE_DUCKDNS
+if [ "$USE_DUCKDNS" = "y" ] || [ "$USE_DUCKDNS" = "Y" ]; then
+    read -p "Enter your DuckDNS API token: " DUCKDNS_TOKEN
+    read -p "Enter your DuckDNS subdomain (without .duckdns.org): " DUCKDNS_SUBDOMAIN
+    DOMAIN="$DUCKDNS_SUBDOMAIN.duckdns.org"
+    DUCKDNS_SCRIPT="/usr/local/bin/update-duckdns.sh"
+    cat <<EOF > $DUCKDNS_SCRIPT
+#!/bin/bash
+curl -k "https://www.duckdns.org/update?domains=${DUCKDNS_SUBDOMAIN}&token=${DUCKDNS_TOKEN}&ip="
+EOF
+    chmod +x $DUCKDNS_SCRIPT
+    echo "✅ DuckDNS update script created at $DUCKDNS_SCRIPT."
+    echo "🚀 Setting up cron job to update DuckDNS every 10 minutes..."
+    (crontab -l 2>/dev/null; echo "*/10 * * * * $DUCKDNS_SCRIPT >/dev/null 2>&1") | crontab -
+    echo "✅ DuckDNS cron job set."
+else
+    echo "✅ DuckDNS configuration skipped."
+    read -p "Enter your domain name for MinIO (e.g. minio.example.com): " DOMAIN
+fi
+
+read -p "Enter your email for SSL certificate registration: " EMAIL
+
+#########################################
 # Exposing MinIO with Nginx and SSL    #
 #########################################
 
 echo ""
 echo "🚀 Installing Nginx and Certbot for SSL..."
 apt install -y nginx certbot python3-certbot-nginx
-
-read -p "Enter your domain name for MinIO (e.g. minio.example.com): " DOMAIN
-read -p "Enter your email for SSL certificate registration: " EMAIL
 
 echo "🚀 Configuring Nginx reverse proxy for MinIO Console..."
 NGINX_CONF="/etc/nginx/sites-available/minio.conf"
@@ -103,30 +127,3 @@ certbot --nginx --redirect --agree-tos --non-interactive -d $DOMAIN -m $EMAIL
 
 echo "✅ SSL setup complete."
 echo "➡️  Access MinIO at: https://$DOMAIN"
-
-
-#########################################
-# DuckDNS (Dynamic DNS) Configuration  #
-#########################################
-
-echo ""
-read -p "Do you want to use DuckDNS for dynamic DNS? (y/n): " USE_DUCKDNS
-if [ "$USE_DUCKDNS" = "y" ] || [ "$USE_DUCKDNS" = "Y" ]; then
-    read -p "Enter your DuckDNS API token: " DUCKDNS_TOKEN
-    read -p "Enter your DuckDNS subdomain (without .duckdns.org): " DUCKDNS_SUBDOMAIN
-    DUCKDNS_SCRIPT="/usr/local/bin/update-duckdns.sh"
-    cat <<EOF > $DUCKDNS_SCRIPT
-#!/bin/bash
-curl -k "https://www.duckdns.org/update?domains=${DUCKDNS_SUBDOMAIN}&token=${DUCKDNS_TOKEN}&ip="
-EOF
-    chmod +x $DUCKDNS_SCRIPT
-    echo "✅ DuckDNS update script created at $DUCKDNS_SCRIPT."
-    echo "🚀 Setting up cron job to update DuckDNS every 10 minutes..."
-    (crontab -l 2>/dev/null; echo "*/10 * * * * $DUCKDNS_SCRIPT >/dev/null 2>&1") | crontab -
-    echo "✅ DuckDNS cron job set."
-else
-    echo "✅ DuckDNS configuration skipped."
-fi
-
-echo ""
-echo "✅ Setup complete. Access MinIO at: https://$DOMAIN"
